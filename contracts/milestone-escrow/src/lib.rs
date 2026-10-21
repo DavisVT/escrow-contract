@@ -6835,14 +6835,15 @@ impl MilestoneEscrow {
 
         Self::validate_multisig_setup(&signers, threshold)?;
 
+        let signers_clone = signers.clone();
         let config = MultiSigConfig(signers, threshold);
         env.storage()
             .persistent()
             .set(&DataKey::MultiSigConfig, &config);
 
         // Structured event for indexers / auditors (issue #455).  The two
-        // payload fields are read back from instance storage right after the
-        // writes above, so the event reconciles exactly with the state this
+        // payload fields are taken from the local variables that were just
+        // written to storage, so the event reconciles exactly with the state this
         // call persisted rather than with the raw inputs.  Nothing fallible
         // follows the publish: every rejection above (`NotInitialized`,
         // `Unauthorized`, `AlreadyInitialized`, `MultiSigNoSigners`,
@@ -6850,16 +6851,12 @@ impl MilestoneEscrow {
         // `MultiSigDuplicateSigner`) returns before this point, so a
         // successful call carries exactly one `msiginit` event and a rejected
         // call carries none.
-        let MultiSigConfig(stored_signers, stored_threshold) =
-            Self::cold_get(&env, &DataKey::MultiSigConfig)
-                .expect("MultiSigConfig was written above");
-
         env.events().publish(
             (symbol_short!("msiginit"),),
             MultisigApprovalInitEvent {
                 admin,
-                signers: stored_signers,
-                threshold: stored_threshold,
+                signers: signers_clone,
+                threshold,
             },
         );
 
