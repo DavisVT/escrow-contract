@@ -168,6 +168,14 @@ pub enum Error {
     /// arbiter == client, arbiter == freelancer, or client == freelancer —
     /// removes an independent check-and-balance and is rejected.
     InvalidParties = 44,
+    /// `auto_release_seconds` is zero, which disables the auto-release window.
+    InvalidDuration = 45,
+    /// The whitelist already contains `MAX_WHITELIST_SIZE` (50) entries.
+    WhitelistFull = 46,
+    /// Removing a token would leave the whitelist empty (at least one token must remain).
+    WhitelistMinimum = 47,
+    /// A ratio vector exceeds the maximum allowed number of parties (255).
+    TooManyParties = 48,
 }
 
 const MAX_REVISIONS: u32 = 3;
@@ -2814,10 +2822,11 @@ impl MilestoneEscrow {
     ///   - Any individual milestone amount is `≤ 0` (zero or negative amounts
     ///     are not valid escrow values).
     ///   - The sum of all milestone amounts overflows `i128`.
-    ///   - `auto_release_seconds` is `0` (zero disables the auto-release
-    ///     window entirely, which is not a valid configuration).
-    ///     Note: the `auto_release_seconds` check runs *after* the milestone
-    ///     amount validation in the current implementation.
+    ///
+    /// * [`Error::InvalidDuration`] – `auto_release_seconds` is `0` (zero disables
+    ///   the auto-release window entirely, which is not a valid configuration).
+    ///   Note: the `auto_release_seconds` check runs *after* the milestone
+    ///   amount validation in the current implementation.
     ///
     /// * [`Error::InvalidMilestone`] – An element of `milestone_amounts` could
     ///   not be retrieved by index during the milestone-storage loop.  In
@@ -2973,7 +2982,7 @@ impl MilestoneEscrow {
             .persistent()
             .set(&DataKey::WhitelistedTokens, &whitelist);
         if auto_release_seconds == 0 {
-            return Err(Error::InvalidAmount);
+            return Err(Error::InvalidDuration);
         }
         if dispute_timeout_seconds == 0 {
             return Err(Error::InvalidDisputeTimeout);
@@ -3218,7 +3227,7 @@ impl MilestoneEscrow {
     ///   duplicate token is always reported as `TokenAlreadyWhitelisted` even
     ///   when the whitelist is at capacity.
     ///
-    /// * [`Error::InvalidAmount`] – The whitelist already contains
+    /// * [`Error::WhitelistFull`] – The whitelist already contains
     ///   `MAX_WHITELIST_SIZE` (50) entries. Adding another would exceed the
     ///   capacity cap. This guards against unbounded `Vec` growth and `u32`
     ///   length-counter overflow.
@@ -3293,7 +3302,7 @@ impl MilestoneEscrow {
     /// * `AlreadyFunded`       - The job has already been funded, preventing further whitelist modifications.
     /// * `InvalidAddress`      - The provided `token` address is the zero account or the zero contract.
     /// * `TokenNotWhitelisted` - The whitelist is empty, or the provided `token` is not present in the whitelist.
-    /// * `InvalidAmount`       - Removing the token would leave the whitelist empty (the contract requires at least one token to remain).
+    /// * `WhitelistMinimum`    - Removing the token would leave the whitelist empty (the contract requires at least one token to remain).
     pub fn remove_whitelisted_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         Self::require_admin(&env, &admin)?;
 
@@ -3334,7 +3343,7 @@ impl MilestoneEscrow {
 
         let post_removal_len = whitelist_len.checked_sub(1).ok_or(Error::InvalidAmount)?;
         if post_removal_len == 0 {
-            return Err(Error::InvalidAmount);
+            return Err(Error::WhitelistMinimum);
         }
 
         if !whitelist.contains(&token) {
@@ -4066,11 +4075,11 @@ impl MilestoneEscrow {
         let extension = Self::load_time_extension(&env, milestone_index);
         let deadline = Self::auto_release_deadline(&meta, delivered_at, extension)?;
         let current = env.ledger().timestamp();
-        let deadline_i64 = i64::try_from(deadline).map_err(|_| Error::InvalidAmount)?;
-        let current_i64 = i64::try_from(current).map_err(|_| Error::InvalidAmount)?;
+        let deadline_i64 = i64::try_from(deadline).map_err(|_| Error::ArithmeticOverflow)?;
+        let current_i64 = i64::try_from(current).map_err(|_| Error::ArithmeticOverflow)?;
         deadline_i64
             .checked_sub(current_i64)
-            .ok_or(Error::InvalidAmount)
+            .ok_or(Error::ArithmeticOverflow)
     }
 
     /// Release a partial payment for a delivered milestone.
@@ -4631,8 +4640,8 @@ impl MilestoneEscrow {
     /// * `InvalidStatus`    – The milestone is not currently `Disputed`.
     /// * `NotAccepted`      – The freelancer or arbiter has not accepted the
     ///                        job.
-    /// * `InvalidAmount`    – The milestone's remaining balance, or the
-    ///                        contract's token balance, is not positive.
+    /// * `InvalidAmount`    – The milestone's remaining balance is not positive.
+    /// * `EmptyBalance`     – The contract's token balance is not positive.
     pub fn resolve_dispute(
         env: Env,
         arbiter: Address,
@@ -4699,7 +4708,7 @@ impl MilestoneEscrow {
         let token_client = token::Client::new(&env, &meta.token);
         let contract_balance = Self::available_balance(&env, &token_client);
         if contract_balance <= 0 {
-            return Err(Error::InvalidAmount);
+            return Err(Error::EmptyBalance);
         }
 
         let payout = remaining.min(contract_balance);
@@ -6608,17 +6617,17 @@ impl MilestoneEscrow {
     ///
     /// 1. `total_amount` ≤ 0                → `InvalidAmount`
     /// 2. `ratios` empty                    → `InvalidRatio`
-    /// 3. `ratios.len()` > 255              → `InvalidAmount`
+    /// 3. `ratios.len()` > 255              → `TooManyParties`
     /// 4. negative entry, overflowing sum, or `Σratios` ≤ 0 → `InvalidRatio`
     /// 5. allocation arithmetic overflow    → `InvalidAmount`
     ///
     /// # Errors
-    /// * `InvalidAmount`  – `total_amount` ≤ 0; `ratios` longer than
-    ///   `MAX_MULTISIG_RATIO_COUNT`; or an `i128` checked operation inside the
-    ///   allocation maths (weighted product, running base sum, residue
+    /// * `InvalidAmount`  – `total_amount` ≤ 0; or an `i128` checked operation
+    ///   inside the allocation maths (weighted product, running base sum, residue
     ///   subtraction, per-entry increment) is unrepresentable.
     /// * `InvalidRatio`   – `ratios` is empty; any entry is negative; `Σratios`
     ///   overflows `i128`; or `Σratios` ≤ 0 (every entry zero).
+    /// * `TooManyParties` – `ratios` is longer than `MAX_MULTISIG_RATIO_COUNT`.
     ///
     /// Arithmetic overflow maps to `InvalidAmount` / `InvalidRatio`.
     pub fn compute_ratio_allocation(
@@ -6636,7 +6645,7 @@ impl MilestoneEscrow {
         }
 
         if ratios.len() > MAX_MULTISIG_RATIO_COUNT {
-            return Err(Error::InvalidAmount);
+            return Err(Error::TooManyParties);
         }
 
         let mut ratio_sum: i128 = 0;

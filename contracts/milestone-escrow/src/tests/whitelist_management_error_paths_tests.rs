@@ -284,7 +284,7 @@ fn remove_rejects_last_remaining_token() {
 
     assert_eq!(
         client.try_remove_whitelisted_token(&admin_addr, &token_contract_id),
-        Err(Ok(Error::InvalidAmount))
+        Err(Ok(Error::WhitelistMinimum))
     );
     assert_eq!(client.get_whitelisted_tokens(), before);
 }

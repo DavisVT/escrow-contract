@@ -36,6 +36,45 @@ The escrow's protection depends on **four distinct roles** assigned at `initiali
 | `sweep_excess` | Client or admin | Recover surplus tokens not backing obligations |
 | `emergency_unpause_parties` | Client and freelancer | Jointly lift a party-initiated pause |
 
+## Contract Errors
+
+| Error | Description |
+|---|---|
+| `AlreadyInitialized` | Contract has already been initialized |
+| `AlreadyFunded` | Job has already been funded |
+| `AlreadyAccepted` | Job has already been accepted by the freelancer or arbiter |
+| `InvalidAmount` | Invalid monetary amount (zero, negative, or overflow) |
+| `InvalidDuration` | Invalid time duration (e.g., `auto_release_seconds` is zero) |
+| `InvalidDisputeTimeout` | Dispute timeout is zero or invalid |
+| `InvalidParties` | Party addresses are not distinct (collision detected) |
+| `InvalidAddress` | Address is the zero account or zero contract |
+| `InvalidStatus` | Operation not allowed in current milestone/escrow state |
+| `InvalidMilestone` | Milestone index out of bounds or milestone data invalid |
+| `InvalidRatio` | Invalid multisig ratio (empty, negative, or sum overflow) |
+| `TooManyParties` | Multisig ratio vector exceeds maximum length (255) |
+| `Unauthorized` | Caller is not authorized for this operation |
+| `NotInitialized` | Contract has not been initialized |
+| `NotFunded` | Job has not been funded yet |
+| `NotAccepted` | Freelancer or arbiter has not accepted the job |
+| `Paused` | Contract is emergency-paused |
+| `TokenNotWhitelisted` | Token is not in the contract's whitelist |
+| `TokenAlreadyWhitelisted` | Token is already in the whitelist |
+| `WhitelistFull` | Token whitelist is at maximum capacity (50) |
+| `WhitelistMinimum` | Cannot remove last token from whitelist (minimum 1 required) |
+| `EmptyBalance` | Contract has no token balance for the operation |
+| `ArithmeticOverflow` | Arithmetic operation would overflow |
+| `RevisionLimitExceeded` | Maximum revision requests (3) exceeded for a milestone |
+| `DisputeTimeoutLocked` | Dispute timeout configuration is locked |
+| `TaxWithholdingLocked` | Tax withholding configuration is locked |
+| `PlatformFeeAllocationLocked` | Platform fee allocation is locked |
+| `EmergencyPauseLocked` | Emergency pause configuration is locked |
+| `TimeExtensionLocked` | Time extension configuration is locked |
+| `PaymentStreamingLocked` | Payment streaming configuration is locked |
+| `NoPendingAdminTransfer` | No pending admin transfer to accept or cancel |
+| `AdminTransferNotExpired` | Admin transfer timeout has not expired |
+| `UninitializedColdConfig` | Cold configuration (whitelist, multisig, yield, fees) not initialized |
+| `AlreadyMigrated` | Cold configuration has already been migrated |
+
 ## Milestone States
 
 Pending → Delivered → Released
