@@ -29,6 +29,7 @@ mod emergency_pause_split_refund_tests;
 mod emergency_pause_test;
 mod event_docs_sync_tests;
 mod execute_admin_transfer_tests;
+mod fund_footprint_tests;
 mod funding_mode_tests;
 mod get_escrow_interest_yield_no_mutation_tests;
 mod get_job_no_mutation_tests;

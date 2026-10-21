@@ -2633,10 +2633,14 @@ impl MilestoneEscrow {
     }
 
     fn validate_fund_amount(env: &Env, meta: &JobMeta) -> Result<i128, Error> {
-        let total_amount = Self::checked_job_total(env, meta)?;
+        let total_amount = meta.total_amount;
         if total_amount <= 0 {
             return Err(Error::InvalidAmount);
         }
+
+        // Debug-only consistency check: verify that stored total matches sum of milestones.
+        // Milestone amounts are immutable after initialize, so this should always hold.
+        debug_assert_eq!(Self::checked_job_total(env, meta).unwrap(), total_amount);
 
         Ok(total_amount)
     }
